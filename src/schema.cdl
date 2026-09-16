@@ -5,7 +5,7 @@ import "./main.cdl";
 /// The names of the tables in `db`, in the order sqlite lists them.
 fn tables(db) {
     let out = [];
-    let rows = db.query("select name from sqlite_schema where type = 'table' and name not like 'sqlite_%' order by name", []);
+    let rows = db.query("select name from sqlite_schema where type = 'table' and name not like 'sqlite_%' order by name");
     for row in rows {
         out.push(row.text("name"));
     }
@@ -23,7 +23,7 @@ struct Column {
 /// The columns of `table` in `db`, in declaration order.
 fn columns(db, table) {
     let out = [];
-    let rows = db.query("select name, type, \"notnull\", pk from pragma_table_info(?)", [Value::Text(table)]);
+    let rows = db.query_with("select name, type, \"notnull\", pk from pragma_table_info(?)", [Value::Text(table)]);
     for row in rows {
         out.push(Column {
             name: row.text("name"),
