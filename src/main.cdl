@@ -186,16 +186,9 @@ impl Database {
         return Statement { handle: handle, db: self.handle };
     }
 
-    /// Runs `sql` and returns every row. Use `query_with` to bind parameters.
-    fn query(self, sql) {
-        let stmt = self.prepare(sql);
-        let rows = stmt.rows();
-        stmt.finalize();
-        return rows;
-    }
-
-    /// Runs `sql` with `params` bound in order and returns every row.
-    fn query_with(self, sql, params) {
+    /// Runs `sql` with `params` bound in order and returns every row. Pass
+    /// `[]` for a statement with no parameters.
+    fn query(self, sql, params: Value[]) {
         let stmt = self.prepare(sql);
         stmt.bind_all(params);
         let rows = stmt.rows();
@@ -203,18 +196,10 @@ impl Database {
         return rows;
     }
 
-    /// Runs `sql`, for a statement that returns nothing, and returns how
-    /// many rows it changed. Use `run_with` to bind parameters.
-    fn run(self, sql) {
-        let stmt = self.prepare(sql);
-        stmt.run();
-        stmt.finalize();
-        return sqlite::sq_changes(self.handle);
-    }
-
     /// Runs `sql` with `params` bound in order, for a statement that returns
-    /// nothing, and returns how many rows it changed.
-    fn run_with(self, sql, params) {
+    /// nothing, and returns how many rows it changed. Pass `[]` for a
+    /// statement with no parameters.
+    fn run(self, sql, params: Value[]) {
         let stmt = self.prepare(sql);
         stmt.bind_all(params);
         stmt.run();
@@ -235,7 +220,7 @@ impl Database {
         let sql = "insert into " + table.quote_ident()
             + " (" + strutil::join_idents(names) + ") values ("
             + strutil::placeholders(names.len()) + ")";
-        self.run_with(sql, params);
+        self.run(sql, params);
         return self.last_rowid();
     }
 

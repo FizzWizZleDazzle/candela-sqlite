@@ -20,7 +20,7 @@ fn main() {
     let db = open("notes.db");
     db.exec("create table if not exists notes (id integer primary key, body text)");
     db.insert("notes", {"body": Value::Text("first")});
-    for row in db.query("select id, body from notes order by id") {
+    for row in db.query("select id, body from notes order by id", []) {
         print(row.get<int>("id"), row.get<string>("body"));
     }
     db.close();
@@ -28,13 +28,13 @@ fn main() {
 ```
 
 `open` takes a file path or `":memory:"`. `exec` runs SQL that returns
-nothing; `query` returns the rows of a statement with no parameters, and
-`query_with` binds a list of values in order first; `run` and `run_with` do
-the same for a statement that returns nothing and give back the number of rows
-changed; `insert` builds the statement from a map of column names to values.
-`prepare` gives a `Statement` to bind and step yourself when one statement
-runs many times. The package is imported bare rather than with `as`, because
-an enum variant such as `Value::Text` cannot be spelled through an alias yet.
+nothing; `query` binds a list of values in order and returns the rows, and
+`run` does the same for a statement that returns nothing and gives back the
+number of rows changed; pass `[]` when there is nothing to bind. `insert`
+builds the statement from a map of column names to values. `prepare` gives a
+`Statement` to bind and step yourself when one statement runs many times. The
+package is imported bare rather than with `as`, because an enum variant such
+as `Value::Text` cannot be spelled through an alias yet.
 
 ## Values
 

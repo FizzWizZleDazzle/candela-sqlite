@@ -36,7 +36,7 @@ fn main() {
     stmt.finalize();
 
     // read back, typed
-    let rows = db.query("select id, name, age, score from people order by id");
+    let rows = db.query("select id, name, age, score from people order by id", []);
     assert::assert_eq(rows.len(), 4);
     assert::assert_eq(rows[0].get<string>("name"), "Ada");
     assert::assert_eq(rows[0].get<int>("age"), 36);
@@ -47,15 +47,15 @@ fn main() {
     assert::assert_eq(rows[3].names, ["id", "name", "age", "score"]);
 
     // parameters of every kind, and a where clause
-    let older = db.query_with("select name from people where age > ? order by name", [Value::Int(30)]);
+    let older = db.query("select name from people where age > ? order by name", [Value::Int(30)]);
     assert::assert_eq(older.len(), 2);
     assert::assert_eq(older[0].get<string>("name"), "Ada");
     assert::assert_eq(older[1].get<string>("name"), "Grace");
 
     // update and delete report their row counts
-    assert::assert_eq(db.run("update people set age = age + 1 where age is not null"), 3);
-    assert::assert_eq(db.run_with("delete from people where name = ?", [Value::Text("Linus")]), 1);
-    assert::assert_eq(db.query("select count(*) as n from people")[0].get<int>("n"), 3);
+    assert::assert_eq(db.run("update people set age = age + 1 where age is not null", []), 3);
+    assert::assert_eq(db.run("delete from people where name = ?", [Value::Text("Linus")]), 1);
+    assert::assert_eq(db.query("select count(*) as n from people", [])[0].get<int>("n"), 3);
 
     // a bad column name, a bad statement, and a bad bind count all raise
     let raised = "";
@@ -76,7 +76,7 @@ fn main() {
 
     raised = "";
     try {
-        db.query_with("select ?", [Value::Int(1), Value::Int(2)]);
+        db.query("select ?", [Value::Int(1), Value::Int(2)]);
     } catch e {
         raised = e;
     }
