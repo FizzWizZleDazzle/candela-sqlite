@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install candela
+        run: |
+          set -euo pipefail
+          curl -fsSL https://candela.lumenfx.dev/install.sh |
+            sh -s -- --version nightly --no-confirm --no-modify-path
+          echo "$HOME/.candela" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: candela --version
+      - run: ./build-native.sh
+      - run: candela check
+      - run: candela run tests/test_sqlite.cdl
+
+  pack:
+    name: pack
+    uses: lumen-fx/candela/.github/workflows/build-package.yml@main
+    with:
+      candela-version: nightly
+      native-build: ./build-native.sh

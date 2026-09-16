@@ -1,0 +1,7 @@
+[package]
+name = "sqlite"
+version = "0.1.0"
+description = "SQLite for candela: open a database, run SQL with bound parameters, read rows back"
+
+[dependencies]
+strutil = "0.1"

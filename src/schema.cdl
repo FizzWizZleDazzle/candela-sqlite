@@ -1,0 +1,36 @@
+// sqlite/schema: what a database contains, read from its own catalogue.
+
+import "./main.cdl";
+
+/// The names of the tables in `db`, in the order sqlite lists them.
+fn tables(db) {
+    let out = [];
+    let rows = db.query("select name from sqlite_schema where type = 'table' and name not like 'sqlite_%' order by name", []);
+    for row in rows {
+        out.push(row.text("name"));
+    }
+    return out;
+}
+
+/// One column of a table, as `pragma table_info` reports it.
+struct Column {
+    name: string,
+    kind: string,
+    not_null: bool,
+    primary_key: bool,
+}
+
+/// The columns of `table` in `db`, in declaration order.
+fn columns(db, table) {
+    let out = [];
+    let rows = db.query("select name, type, \"notnull\", pk from pragma_table_info(?)", [Value::Text(table)]);
+    for row in rows {
+        out.push(Column {
+            name: row.text("name"),
+            kind: row.text("type"),
+            not_null: row.int("notnull") != 0,
+            primary_key: row.int("pk") != 0,
+        });
+    }
+    return out;
+}

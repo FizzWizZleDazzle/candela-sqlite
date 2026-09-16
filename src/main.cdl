@@ -1,0 +1,320 @@
+// sqlite: a candela binding to SQLite.
+//
+// The native half is the sqlite amalgamation plus a small shim, built into
+// dist/ beside this package; it hands out integer handles because that is
+// what crosses the foreign interface. This file wraps those handles in
+// `Database` and `Statement` and turns sqlite's return codes into raised
+// errors, so a caller writes `db.query(sql, params)` and catches
+// "sqlite_error" if it wants to.
+
+import "strutil" as strutil;
+
+dylib "../dist/sqlite" {
+    string sq_version();
+    int sq_open(string);
+    string sq_errmsg(int);
+    int sq_close(int);
+    int sq_exec(int, string);
+    int sq_changes(int);
+    int sq_last_rowid(int);
+    int sq_prepare(int, string);
+    int sq_bind_int(int, int, int);
+    int sq_bind_float(int, int, float);
+    int sq_bind_text(int, int, string);
+    int sq_bind_null(int, int);
+    int sq_bind_count(int);
+    int sq_step(int);
+    int sq_reset(int);
+    int sq_finalize(int);
+    int sq_column_count(int);
+    string sq_column_name(int, int);
+    int sq_column_type(int, int);
+    int sq_column_int(int, int);
+    float sq_column_float(int, int);
+    string sq_column_text(int, int);
+}
+
+/// One cell, as sqlite typed it. Bind values are written the same way.
+enum Value {
+    Int(int),
+    Real(float),
+    Text(string),
+    Null,
+}
+
+impl Value {
+    /// The cell as an int. A Real is truncated, a Text parsed, a Null is 0.
+    fn as_int(self) {
+        let out = 0;
+        match self {
+            Int(n) => { out = n; }
+            Real(f) => { out = int(f); }
+            Text(s) => { out = int(s); }
+            Null => { out = 0; }
+        }
+        return out;
+    }
+
+    /// The cell as a float. An Int is widened, a Text parsed, a Null is 0.0.
+    fn as_float(self) {
+        let out = 0.0;
+        match self {
+            Int(n) => { out = float(n); }
+            Real(f) => { out = f; }
+            Text(s) => { out = float(s); }
+            Null => { out = 0.0; }
+        }
+        return out;
+    }
+
+    /// The cell as text. Numbers are formatted, a Null is the empty string.
+    fn as_text(self) {
+        let out = "";
+        match self {
+            Int(n) => { out = str(n); }
+            Real(f) => { out = str(f); }
+            Text(s) => { out = s; }
+            Null => { out = ""; }
+        }
+        return out;
+    }
+
+    /// True for a Null cell.
+    fn is_null(self) {
+        return self == Value::Null;
+    }
+}
+
+/// One row of a result: the column names and the cells in the same order.
+struct Row {
+    names: string[],
+    cells: Value[],
+}
+
+impl Row {
+    /// The cell under `name`. Raises "sqlite_no_such_column" when the row has
+    /// no column by that name.
+    fn get(self, name) {
+        for i in range(self.names.len()) {
+            if self.names[i] == name {
+                return self.cells[i];
+            }
+        }
+        throw("sqlite_no_such_column");
+        return Value::Null;
+    }
+
+    /// The cell under `name` as an int.
+    fn int(self, name) {
+        return self.get(name).as_int();
+    }
+
+    /// The cell under `name` as a float.
+    fn float(self, name) {
+        return self.get(name).as_float();
+    }
+
+    /// The cell under `name` as text.
+    fn text(self, name) {
+        return self.get(name).as_text();
+    }
+}
+
+/// An open database.
+struct Database {
+    handle: int,
+}
+
+/// A compiled statement, ready to bind and step.
+struct Statement {
+    handle: int,
+    db: int,
+}
+
+/// The version of the SQLite library the package was built with.
+fn version() {
+    return sqlite::sq_version();
+}
+
+/// Opens the database file at `path`, creating it when it does not exist.
+/// ":memory:" opens a database that lives for the process. Raises
+/// "sqlite_open_failed" when the file cannot be opened.
+fn open(path) {
+    let handle = sqlite::sq_open(path);
+    if handle < 0 {
+        throw("sqlite_open_failed");
+    }
+    return Database { handle: handle };
+}
+
+fn raise(db) {
+    throw("sqlite_error: " + sqlite::sq_errmsg(db));
+}
+
+impl Database {
+    /// Runs one or more SQL statements with no parameters and no result.
+    /// Raises "sqlite_error: ..." with sqlite's message on failure.
+    fn exec(self, sql) {
+        if sqlite::sq_exec(self.handle, sql) != 0 {
+            raise(self.handle);
+        }
+    }
+
+    /// Compiles `sql` into a statement. Raises "sqlite_error: ..." when it
+    /// does not compile.
+    fn prepare(self, sql) {
+        let handle = sqlite::sq_prepare(self.handle, sql);
+        if handle < 0 {
+            raise(self.handle);
+        }
+        return Statement { handle: handle, db: self.handle };
+    }
+
+    /// Runs `sql` with `params` bound in order and returns every row.
+    fn query(self, sql, params) {
+        let stmt = self.prepare(sql);
+        stmt.bind_all(params);
+        let rows = stmt.rows();
+        stmt.finalize();
+        return rows;
+    }
+
+    /// Runs `sql` with `params` bound in order, for a statement that returns
+    /// nothing, and returns how many rows it changed.
+    fn run(self, sql, params) {
+        let stmt = self.prepare(sql);
+        stmt.bind_all(params);
+        stmt.run();
+        stmt.finalize();
+        return sqlite::sq_changes(self.handle);
+    }
+
+    /// Inserts one row into `table` from a map of column name to Value and
+    /// returns the new rowid. Names are quoted as identifiers, so any column
+    /// name works.
+    fn insert(self, table, values) {
+        let names = [];
+        let params = [];
+        for name in values.keys() {
+            names.push(name);
+            params.push(values.get(name));
+        }
+        let sql = "insert into " + table.quote_ident()
+            + " (" + strutil::join_idents(names) + ") values ("
+            + strutil::placeholders(names.len()) + ")";
+        self.run(sql, params);
+        return self.last_rowid();
+    }
+
+    /// How many rows the most recent insert, update or delete changed.
+    fn changes(self) {
+        return sqlite::sq_changes(self.handle);
+    }
+
+    /// The rowid of the most recent insert. sqlite rowids are 64-bit; one
+    /// past the int range comes back truncated.
+    fn last_rowid(self) {
+        return sqlite::sq_last_rowid(self.handle);
+    }
+
+    /// Closes the database. Statements still open on it are finalized.
+    fn close(self) {
+        if sqlite::sq_close(self.handle) != 0 {
+            raise(self.handle);
+        }
+    }
+}
+
+impl Statement {
+    /// Binds `value` to the parameter at `index`, counting from 1.
+    fn bind(self, index, value) {
+        let rc = 0;
+        match value {
+            Int(n) => { rc = sqlite::sq_bind_int(self.handle, index, n); }
+            Real(f) => { rc = sqlite::sq_bind_float(self.handle, index, f); }
+            Text(s) => { rc = sqlite::sq_bind_text(self.handle, index, s); }
+            Null => { rc = sqlite::sq_bind_null(self.handle, index); }
+        }
+        if rc != 0 {
+            raise(self.db);
+        }
+    }
+
+    /// Binds `params` to the parameters 1..n in order. Raises
+    /// "sqlite_bind_count" when the count differs from the statement's.
+    fn bind_all(self, params) {
+        if params.len() != sqlite::sq_bind_count(self.handle) {
+            throw("sqlite_bind_count");
+        }
+        for i in range(params.len()) {
+            self.bind(i + 1, params[i]);
+        }
+    }
+
+    /// Advances to the next row. True when a row is ready to read, false at
+    /// the end. Raises "sqlite_error: ..." on failure.
+    fn step(self) {
+        let rc = sqlite::sq_step(self.handle);
+        if rc == 100 {
+            return true;
+        }
+        if rc == 101 {
+            return false;
+        }
+        raise(self.db);
+        return false;
+    }
+
+    /// The row `step` stopped on.
+    fn row(self) {
+        let names = [];
+        let cells = [];
+        let count = sqlite::sq_column_count(self.handle);
+        for i in range(count) {
+            names.push(sqlite::sq_column_name(self.handle, i));
+            let kind = sqlite::sq_column_type(self.handle, i);
+            if kind == 1 {
+                cells.push(Value::Int(sqlite::sq_column_int(self.handle, i)));
+            } else if kind == 2 {
+                cells.push(Value::Real(sqlite::sq_column_float(self.handle, i)));
+            } else if kind == 5 {
+                cells.push(Value::Null);
+            } else {
+                cells.push(Value::Text(sqlite::sq_column_text(self.handle, i)));
+            }
+        }
+        return Row { names: names, cells: cells };
+    }
+
+    /// Steps to the end and returns every row, then resets the statement so
+    /// it can be bound and run again.
+    fn rows(self) {
+        let out = [];
+        while self.step() {
+            out.push(self.row());
+        }
+        self.reset();
+        return out;
+    }
+
+    /// Steps to the end, discarding any rows, then resets.
+    fn run(self) {
+        while self.step() {
+        }
+        self.reset();
+    }
+
+    /// Rewinds the statement and clears its bindings.
+    fn reset(self) {
+        sqlite::sq_reset(self.handle);
+    }
+
+    /// Releases the statement. It cannot be used afterwards.
+    fn finalize(self) {
+        sqlite::sq_finalize(self.handle);
+    }
+}
+
+fn main() {
+    print("sqlite " + version());
+}

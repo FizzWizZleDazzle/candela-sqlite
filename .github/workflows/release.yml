@@ -1,0 +1,17 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    uses: lumen-fx/candela/.github/workflows/build-package.yml@main
+    with:
+      candela-version: nightly
+      native-build: ./build-native.sh
+    secrets:
+      lpm-token: ${{ secrets.LPM_TOKEN }}
