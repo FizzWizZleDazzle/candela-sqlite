@@ -91,10 +91,34 @@ struct Row {
     cells: Value[],
 }
 
+/// A cell read at one type. Each instantiation converts its own way, which is
+/// what lets `Row.get<T>` return the type it is asked for.
+struct Cell<T> {
+    value: Value,
+}
+
+impl Cell<int> {
+    fn read(self) -> int {
+        return self.value.as_int();
+    }
+}
+
+impl Cell<float> {
+    fn read(self) -> float {
+        return self.value.as_float();
+    }
+}
+
+impl Cell<string> {
+    fn read(self) -> string {
+        return self.value.as_text();
+    }
+}
+
 impl Row {
-    /// The cell under `name`. Raises "sqlite_no_such_column" when the row has
-    /// no column by that name.
-    fn get(self, name) {
+    /// The cell under `name` as it came from sqlite. Raises
+    /// "sqlite_no_such_column" when the row has no column by that name.
+    fn cell(self, name) {
         for i in range(self.names.len()) {
             if self.names[i] == name {
                 return self.cells[i];
@@ -104,19 +128,11 @@ impl Row {
         return Value::Null;
     }
 
-    /// The cell under `name` as an int.
-    fn int(self, name) {
-        return self.get(name).as_int();
-    }
-
-    /// The cell under `name` as a float.
-    fn float(self, name) {
-        return self.get(name).as_float();
-    }
-
-    /// The cell under `name` as text.
-    fn text(self, name) {
-        return self.get(name).as_text();
+    /// The cell under `name` converted to `T`: `row.get<int>("id")`,
+    /// `row.get<float>("score")`, `row.get<string>("body")`. The conversion
+    /// is the matching `as_` method on `Value`.
+    fn get<T>(self, name) -> T {
+        return Cell<T>{ value: self.cell(name) }.read();
     }
 }
 

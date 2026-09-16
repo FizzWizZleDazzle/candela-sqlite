@@ -21,7 +21,7 @@ fn main() {
     db.exec("create table if not exists notes (id integer primary key, body text)");
     db.insert("notes", {"body": Value::Text("first")});
     for row in db.query("select id, body from notes order by id") {
-        print(row.int("id"), row.text("body"));
+        print(row.get<int>("id"), row.get<string>("body"));
     }
     db.close();
 }
@@ -39,8 +39,9 @@ an enum variant such as `Value::Text` cannot be spelled through an alias yet.
 ## Values
 
 A cell or a parameter is a `Value`: `Int(n)`, `Real(f)`, `Text(s)` or `Null`.
-A row's `int`, `float` and `text` methods read a column by name and convert;
-`get` returns the `Value` itself.
+`row.get<int>("id")`, `row.get<float>("score")` and `row.get<string>("body")`
+read a column by name and convert it; `row.cell("score")` returns the `Value`
+itself, for a null check or a match.
 
 ## The schema module
 
