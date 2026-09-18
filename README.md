@@ -14,30 +14,34 @@ candela add sqlite
 ```
 
 ```rust
-import "sqlite" as sqlite;
+import "sqlite";
 
 fn main() {
-    let db = sqlite::open("notes.db");
+    let db = open("notes.db");
     db.exec("create table if not exists notes (id integer primary key, body text)");
     db.insert("notes", {"body": Value::Text("first")});
     for row in db.query("select id, body from notes order by id", []) {
-        print(row.int("id"), row.text("body"));
+        print(row.get<int>("id"), row.get<string>("body"));
     }
     db.close();
 }
 ```
 
-`open` takes a file path or `":memory:"`. `exec` runs SQL with no parameters;
-`query` and `run` bind a list of values in order and return the rows or the
-number of rows changed; `insert` builds the statement from a map of column
-names to values. `prepare` gives a `Statement` to bind and step yourself when
-one statement runs many times.
+`open` takes a file path or `":memory:"`. `exec` runs SQL that returns
+nothing; `query` binds a list of values in order and returns the rows, and
+`run` does the same for a statement that returns nothing and gives back the
+number of rows changed; pass `[]` when there is nothing to bind. `insert`
+builds the statement from a map of column names to values. `prepare` gives a
+`Statement` to bind and step yourself when one statement runs many times. The
+package is imported bare rather than with `as`, because an enum variant such
+as `Value::Text` cannot be spelled through an alias yet.
 
 ## Values
 
 A cell or a parameter is a `Value`: `Int(n)`, `Real(f)`, `Text(s)` or `Null`.
-A row's `int`, `float` and `text` methods read a column by name and convert;
-`get` returns the `Value` itself.
+`row.get<int>("id")`, `row.get<float>("score")` and `row.get<string>("body")`
+read a column by name and convert it; `row.cell("score")` returns the `Value`
+itself, for a null check or a match.
 
 ## The schema module
 
@@ -56,9 +60,7 @@ list of the wrong length `sqlite_bind_count`. Catch them with `try`/`catch`.
 
 ## Limitations
 
-candela integers are 32-bit, so an integer column or rowid outside that range
-comes back truncated; read such a column with `text`. Blob columns are returned
-as text. The library is built single-threaded.
+Blob columns are returned as text. The library is built single-threaded.
 
 ## Building from source
 

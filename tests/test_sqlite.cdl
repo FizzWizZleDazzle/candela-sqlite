@@ -1,7 +1,7 @@
 // Exercises the binding end to end on a temporary file database. Run with
 // `candela run tests/test_sqlite.cdl` after ./build-native.sh.
 import "std/assert" as assert;
-import "../src/main.cdl" as sqlite;
+import "../src/main.cdl";
 import "../src/schema.cdl" as schema;
 
 fn main() {
@@ -9,7 +9,7 @@ fn main() {
     if fs::exists(path) {
         fs::delete(path);
     }
-    let db = sqlite::open(path);
+    let db = open(path);
 
     db.exec("create table people (id integer primary key, name text not null, age integer, score real)");
     assert::assert_eq(schema::tables(db), ["people"]);
@@ -27,6 +27,14 @@ fn main() {
     db.insert("people", {"name": Value::Text("Grace"), "age": Value::Int(45), "score": Value::Null});
     assert::assert_eq(db.last_rowid(), 2);
 
+    // integers cross the boundary at their full width
+    db.exec("create table wide (id integer primary key, n integer)");
+    db.run("insert into wide (id, n) values (?, ?)", [Value::Int(4294967296), Value::Int(-9007199254740993)]);
+    assert::assert_eq(db.last_rowid(), 4294967296);
+    let wide = db.query("select id, n from wide", []);
+    assert::assert_eq(wide[0].get<int>("id"), 4294967296);
+    assert::assert_eq(wide[0].get<int>("n"), -9007199254740993);
+
     // a prepared statement bound and run more than once
     let stmt = db.prepare("insert into people (name, age, score) values (?, ?, ?)");
     stmt.bind_all([Value::Text("Linus"), Value::Int(28), Value::Real(7.25)]);
@@ -38,29 +46,29 @@ fn main() {
     // read back, typed
     let rows = db.query("select id, name, age, score from people order by id", []);
     assert::assert_eq(rows.len(), 4);
-    assert::assert_eq(rows[0].text("name"), "Ada");
-    assert::assert_eq(rows[0].int("age"), 36);
-    assert::assert_eq(rows[0].float("score"), 9.5);
-    assert::assert_true(rows[1].get("score").is_null());
-    assert::assert_eq(rows[3].text("name"), "O'Brien");
-    assert::assert_true(rows[3].get("age").is_null());
+    assert::assert_eq(rows[0].get<string>("name"), "Ada");
+    assert::assert_eq(rows[0].get<int>("age"), 36);
+    assert::assert_eq(rows[0].get<float>("score"), 9.5);
+    assert::assert_true(rows[1].cell("score").is_null());
+    assert::assert_eq(rows[3].get<string>("name"), "O'Brien");
+    assert::assert_true(rows[3].cell("age").is_null());
     assert::assert_eq(rows[3].names, ["id", "name", "age", "score"]);
 
     // parameters of every kind, and a where clause
     let older = db.query("select name from people where age > ? order by name", [Value::Int(30)]);
     assert::assert_eq(older.len(), 2);
-    assert::assert_eq(older[0].text("name"), "Ada");
-    assert::assert_eq(older[1].text("name"), "Grace");
+    assert::assert_eq(older[0].get<string>("name"), "Ada");
+    assert::assert_eq(older[1].get<string>("name"), "Grace");
 
     // update and delete report their row counts
     assert::assert_eq(db.run("update people set age = age + 1 where age is not null", []), 3);
     assert::assert_eq(db.run("delete from people where name = ?", [Value::Text("Linus")]), 1);
-    assert::assert_eq(db.query("select count(*) as n from people", [])[0].int("n"), 3);
+    assert::assert_eq(db.query("select count(*) as n from people", [])[0].get<int>("n"), 3);
 
     // a bad column name, a bad statement, and a bad bind count all raise
     let raised = "";
     try {
-        rows[0].get("nope");
+        rows[0].cell("nope");
     } catch e {
         raised = e;
     }

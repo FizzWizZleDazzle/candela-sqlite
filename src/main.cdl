@@ -91,10 +91,34 @@ struct Row {
     cells: Value[],
 }
 
+/// A cell read at one type. Each instantiation converts its own way, which is
+/// what lets `Row.get<T>` return the type it is asked for.
+struct Cell<T> {
+    value: Value,
+}
+
+impl Cell<int> {
+    fn read(self) -> int {
+        return self.value.as_int();
+    }
+}
+
+impl Cell<float> {
+    fn read(self) -> float {
+        return self.value.as_float();
+    }
+}
+
+impl Cell<string> {
+    fn read(self) -> string {
+        return self.value.as_text();
+    }
+}
+
 impl Row {
-    /// The cell under `name`. Raises "sqlite_no_such_column" when the row has
-    /// no column by that name.
-    fn get(self, name) {
+    /// The cell under `name` as it came from sqlite. Raises
+    /// "sqlite_no_such_column" when the row has no column by that name.
+    fn cell(self, name) {
         for i in range(self.names.len()) {
             if self.names[i] == name {
                 return self.cells[i];
@@ -104,19 +128,11 @@ impl Row {
         return Value::Null;
     }
 
-    /// The cell under `name` as an int.
-    fn int(self, name) {
-        return self.get(name).as_int();
-    }
-
-    /// The cell under `name` as a float.
-    fn float(self, name) {
-        return self.get(name).as_float();
-    }
-
-    /// The cell under `name` as text.
-    fn text(self, name) {
-        return self.get(name).as_text();
+    /// The cell under `name` converted to `T`: `row.get<int>("id")`,
+    /// `row.get<float>("score")`, `row.get<string>("body")`. The conversion
+    /// is the matching `as_` method on `Value`.
+    fn get<T>(self, name) -> T {
+        return Cell<T>{ value: self.cell(name) }.read();
     }
 }
 
@@ -170,8 +186,9 @@ impl Database {
         return Statement { handle: handle, db: self.handle };
     }
 
-    /// Runs `sql` with `params` bound in order and returns every row.
-    fn query(self, sql, params) {
+    /// Runs `sql` with `params` bound in order and returns every row. Pass
+    /// `[]` for a statement with no parameters.
+    fn query(self, sql, params: Value[]) {
         let stmt = self.prepare(sql);
         stmt.bind_all(params);
         let rows = stmt.rows();
@@ -180,8 +197,9 @@ impl Database {
     }
 
     /// Runs `sql` with `params` bound in order, for a statement that returns
-    /// nothing, and returns how many rows it changed.
-    fn run(self, sql, params) {
+    /// nothing, and returns how many rows it changed. Pass `[]` for a
+    /// statement with no parameters.
+    fn run(self, sql, params: Value[]) {
         let stmt = self.prepare(sql);
         stmt.bind_all(params);
         stmt.run();
@@ -211,8 +229,7 @@ impl Database {
         return sqlite::sq_changes(self.handle);
     }
 
-    /// The rowid of the most recent insert. sqlite rowids are 64-bit; one
-    /// past the int range comes back truncated.
+    /// The rowid of the most recent insert.
     fn last_rowid(self) {
         return sqlite::sq_last_rowid(self.handle);
     }

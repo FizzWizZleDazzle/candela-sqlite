@@ -7,7 +7,7 @@ fn tables(db) {
     let out = [];
     let rows = db.query("select name from sqlite_schema where type = 'table' and name not like 'sqlite_%' order by name", []);
     for row in rows {
-        out.push(row.text("name"));
+        out.push(row.get<string>("name"));
     }
     return out;
 }
@@ -26,10 +26,10 @@ fn columns(db, table) {
     let rows = db.query("select name, type, \"notnull\", pk from pragma_table_info(?)", [Value::Text(table)]);
     for row in rows {
         out.push(Column {
-            name: row.text("name"),
-            kind: row.text("type"),
-            not_null: row.int("notnull") != 0,
-            primary_key: row.int("pk") != 0,
+            name: row.get<string>("name"),
+            kind: row.get<string>("type"),
+            not_null: row.get<int>("notnull") != 0,
+            primary_key: row.get<int>("pk") != 0,
         });
     }
     return out;
