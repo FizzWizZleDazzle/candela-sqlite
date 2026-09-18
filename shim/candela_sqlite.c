@@ -28,14 +28,14 @@
 
 typedef struct {
     void **items;
-    int32_t len;
-    int32_t cap;
+    int64_t len;
+    int64_t cap;
 } table;
 
 static table dbs;
 static table stmts;
 
-static int32_t table_add(table *t, void *item) {
+static int64_t table_add(table *t, void *item) {
     if (t->len == 0) {
         t->cap = 8;
         t->items = calloc((size_t)t->cap, sizeof(void *));
@@ -44,14 +44,14 @@ static int32_t table_add(table *t, void *item) {
         }
         t->len = 1;
     }
-    for (int32_t i = 1; i < t->len; i++) {
+    for (int64_t i = 1; i < t->len; i++) {
         if (t->items[i] == NULL) {
             t->items[i] = item;
             return i;
         }
     }
     if (t->len == t->cap) {
-        int32_t cap = t->cap * 2;
+        int64_t cap = t->cap * 2;
         void **grown = realloc(t->items, (size_t)cap * sizeof(void *));
         if (grown == NULL) {
             return -1;
@@ -64,14 +64,14 @@ static int32_t table_add(table *t, void *item) {
     return t->len++;
 }
 
-static void *table_get(const table *t, int32_t handle) {
+static void *table_get(const table *t, int64_t handle) {
     if (handle <= 0 || handle >= t->len) {
         return NULL;
     }
     return t->items[handle];
 }
 
-static void table_remove(table *t, int32_t handle) {
+static void table_remove(table *t, int64_t handle) {
     if (handle > 0 && handle < t->len) {
         t->items[handle] = NULL;
     }
@@ -80,11 +80,11 @@ static void table_remove(table *t, int32_t handle) {
 /* The message of the last failure that had no database to ask. */
 static const char *last_error = "";
 
-static sqlite3 *db_of(int32_t handle) {
+static sqlite3 *db_of(int64_t handle) {
     return (sqlite3 *)table_get(&dbs, handle);
 }
 
-static sqlite3_stmt *stmt_of(int32_t handle) {
+static sqlite3_stmt *stmt_of(int64_t handle) {
     return (sqlite3_stmt *)table_get(&stmts, handle);
 }
 
@@ -96,7 +96,7 @@ EXPORT const char *sq_version(void) {
 
 /* Databases */
 
-EXPORT int32_t sq_open(const char *path) {
+EXPORT int64_t sq_open(const char *path) {
     sqlite3 *db = NULL;
     if (sqlite3_open(path, &db) != SQLITE_OK) {
         last_error = db ? sqlite3_errmsg(db) : "out of memory";
@@ -112,7 +112,7 @@ EXPORT int32_t sq_open(const char *path) {
         }
         return -1;
     }
-    int32_t handle = table_add(&dbs, db);
+    int64_t handle = table_add(&dbs, db);
     if (handle < 0) {
         sqlite3_close(db);
         last_error = "out of memory";
@@ -120,7 +120,7 @@ EXPORT int32_t sq_open(const char *path) {
     return handle;
 }
 
-EXPORT const char *sq_errmsg(int32_t handle) {
+EXPORT const char *sq_errmsg(int64_t handle) {
     sqlite3 *db = db_of(handle);
     if (db == NULL) {
         return last_error;
@@ -128,7 +128,7 @@ EXPORT const char *sq_errmsg(int32_t handle) {
     return sqlite3_errmsg(db);
 }
 
-EXPORT int32_t sq_close(int32_t handle) {
+EXPORT int64_t sq_close(int64_t handle) {
     sqlite3 *db = db_of(handle);
     if (db == NULL) {
         last_error = "not an open database";
@@ -136,7 +136,7 @@ EXPORT int32_t sq_close(int32_t handle) {
     }
     /* Statements still open on this database are finalized first, as
      * sqlite3_close requires. */
-    for (int32_t i = 1; i < stmts.len; i++) {
+    for (int64_t i = 1; i < stmts.len; i++) {
         sqlite3_stmt *stmt = (sqlite3_stmt *)stmts.items[i];
         if (stmt != NULL && sqlite3_db_handle(stmt) == db) {
             sqlite3_finalize(stmt);
@@ -150,7 +150,7 @@ EXPORT int32_t sq_close(int32_t handle) {
     return rc;
 }
 
-EXPORT int32_t sq_exec(int32_t handle, const char *sql) {
+EXPORT int64_t sq_exec(int64_t handle, const char *sql) {
     sqlite3 *db = db_of(handle);
     if (db == NULL) {
         last_error = "not an open database";
@@ -159,21 +159,21 @@ EXPORT int32_t sq_exec(int32_t handle, const char *sql) {
     return sqlite3_exec(db, sql, NULL, NULL, NULL);
 }
 
-EXPORT int32_t sq_changes(int32_t handle) {
+EXPORT int64_t sq_changes(int64_t handle) {
     sqlite3 *db = db_of(handle);
     return db ? sqlite3_changes(db) : 0;
 }
 
 /* The rowid is 64 bits in sqlite and 32 in candela; a rowid past that range
  * comes back truncated. */
-EXPORT int32_t sq_last_rowid(int32_t handle) {
+EXPORT int64_t sq_last_rowid(int64_t handle) {
     sqlite3 *db = db_of(handle);
-    return db ? (int32_t)sqlite3_last_insert_rowid(db) : 0;
+    return db ? (int64_t)sqlite3_last_insert_rowid(db) : 0;
 }
 
 /* Statements */
 
-EXPORT int32_t sq_prepare(int32_t handle, const char *sql) {
+EXPORT int64_t sq_prepare(int64_t handle, const char *sql) {
     sqlite3 *db = db_of(handle);
     if (db == NULL) {
         last_error = "not an open database";
@@ -188,7 +188,7 @@ EXPORT int32_t sq_prepare(int32_t handle, const char *sql) {
         last_error = "the SQL holds no statement";
         return -1;
     }
-    int32_t out = table_add(&stmts, stmt);
+    int64_t out = table_add(&stmts, stmt);
     if (out < 0) {
         sqlite3_finalize(stmt);
         last_error = "out of memory";
@@ -196,41 +196,41 @@ EXPORT int32_t sq_prepare(int32_t handle, const char *sql) {
     return out;
 }
 
-EXPORT int32_t sq_bind_int(int32_t handle, int32_t index, int32_t value) {
+EXPORT int64_t sq_bind_int(int64_t handle, int64_t index, int64_t value) {
     sqlite3_stmt *stmt = stmt_of(handle);
-    return stmt ? sqlite3_bind_int(stmt, index, value) : SQLITE_MISUSE;
+    return stmt ? sqlite3_bind_int64(stmt, index, value) : SQLITE_MISUSE;
 }
 
-EXPORT int32_t sq_bind_float(int32_t handle, int32_t index, double value) {
+EXPORT int64_t sq_bind_float(int64_t handle, int64_t index, double value) {
     sqlite3_stmt *stmt = stmt_of(handle);
     return stmt ? sqlite3_bind_double(stmt, index, value) : SQLITE_MISUSE;
 }
 
-EXPORT int32_t sq_bind_text(int32_t handle, int32_t index, const char *value) {
+EXPORT int64_t sq_bind_text(int64_t handle, int64_t index, const char *value) {
     sqlite3_stmt *stmt = stmt_of(handle);
     /* The buffer candela passes lives for this call only; SQLITE_TRANSIENT
      * makes sqlite take its own copy. */
     return stmt ? sqlite3_bind_text(stmt, index, value, -1, SQLITE_TRANSIENT) : SQLITE_MISUSE;
 }
 
-EXPORT int32_t sq_bind_null(int32_t handle, int32_t index) {
+EXPORT int64_t sq_bind_null(int64_t handle, int64_t index) {
     sqlite3_stmt *stmt = stmt_of(handle);
     return stmt ? sqlite3_bind_null(stmt, index) : SQLITE_MISUSE;
 }
 
-EXPORT int32_t sq_bind_count(int32_t handle) {
+EXPORT int64_t sq_bind_count(int64_t handle) {
     sqlite3_stmt *stmt = stmt_of(handle);
     return stmt ? sqlite3_bind_parameter_count(stmt) : 0;
 }
 
 /* SQLITE_ROW (100) when a row is ready, SQLITE_DONE (101) at the end, and
  * another code on failure. */
-EXPORT int32_t sq_step(int32_t handle) {
+EXPORT int64_t sq_step(int64_t handle) {
     sqlite3_stmt *stmt = stmt_of(handle);
     return stmt ? sqlite3_step(stmt) : SQLITE_MISUSE;
 }
 
-EXPORT int32_t sq_reset(int32_t handle) {
+EXPORT int64_t sq_reset(int64_t handle) {
     sqlite3_stmt *stmt = stmt_of(handle);
     if (stmt == NULL) {
         return SQLITE_MISUSE;
@@ -240,7 +240,7 @@ EXPORT int32_t sq_reset(int32_t handle) {
     return rc;
 }
 
-EXPORT int32_t sq_finalize(int32_t handle) {
+EXPORT int64_t sq_finalize(int64_t handle) {
     sqlite3_stmt *stmt = stmt_of(handle);
     if (stmt == NULL) {
         return SQLITE_MISUSE;
@@ -252,12 +252,12 @@ EXPORT int32_t sq_finalize(int32_t handle) {
 
 /* Columns of the current row */
 
-EXPORT int32_t sq_column_count(int32_t handle) {
+EXPORT int64_t sq_column_count(int64_t handle) {
     sqlite3_stmt *stmt = stmt_of(handle);
     return stmt ? sqlite3_column_count(stmt) : 0;
 }
 
-EXPORT const char *sq_column_name(int32_t handle, int32_t index) {
+EXPORT const char *sq_column_name(int64_t handle, int64_t index) {
     sqlite3_stmt *stmt = stmt_of(handle);
     const char *name = stmt ? sqlite3_column_name(stmt, index) : NULL;
     return name ? name : "";
@@ -265,22 +265,22 @@ EXPORT const char *sq_column_name(int32_t handle, int32_t index) {
 
 /* One of SQLITE_INTEGER (1), SQLITE_FLOAT (2), SQLITE_TEXT (3), SQLITE_BLOB
  * (4), SQLITE_NULL (5). */
-EXPORT int32_t sq_column_type(int32_t handle, int32_t index) {
+EXPORT int64_t sq_column_type(int64_t handle, int64_t index) {
     sqlite3_stmt *stmt = stmt_of(handle);
     return stmt ? sqlite3_column_type(stmt, index) : SQLITE_NULL;
 }
 
-EXPORT int32_t sq_column_int(int32_t handle, int32_t index) {
+EXPORT int64_t sq_column_int(int64_t handle, int64_t index) {
     sqlite3_stmt *stmt = stmt_of(handle);
-    return stmt ? sqlite3_column_int(stmt, index) : 0;
+    return stmt ? sqlite3_column_int64(stmt, index) : 0;
 }
 
-EXPORT double sq_column_float(int32_t handle, int32_t index) {
+EXPORT double sq_column_float(int64_t handle, int64_t index) {
     sqlite3_stmt *stmt = stmt_of(handle);
     return stmt ? sqlite3_column_double(stmt, index) : 0.0;
 }
 
-EXPORT const char *sq_column_text(int32_t handle, int32_t index) {
+EXPORT const char *sq_column_text(int64_t handle, int64_t index) {
     sqlite3_stmt *stmt = stmt_of(handle);
     const unsigned char *text = stmt ? sqlite3_column_text(stmt, index) : NULL;
     return text ? (const char *)text : "";

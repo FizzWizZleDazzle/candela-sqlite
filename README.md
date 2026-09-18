@@ -60,9 +60,7 @@ list of the wrong length `sqlite_bind_count`. Catch them with `try`/`catch`.
 
 ## Limitations
 
-candela integers are 32-bit, so an integer column or rowid outside that range
-comes back truncated; read such a column with `text`. Blob columns are returned
-as text. The library is built single-threaded.
+Blob columns are returned as text. The library is built single-threaded.
 
 ## Building from source
 

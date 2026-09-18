@@ -27,6 +27,14 @@ fn main() {
     db.insert("people", {"name": Value::Text("Grace"), "age": Value::Int(45), "score": Value::Null});
     assert::assert_eq(db.last_rowid(), 2);
 
+    // integers cross the boundary at their full width
+    db.exec("create table wide (id integer primary key, n integer)");
+    db.run("insert into wide (id, n) values (?, ?)", [Value::Int(4294967296), Value::Int(-9007199254740993)]);
+    assert::assert_eq(db.last_rowid(), 4294967296);
+    let wide = db.query("select id, n from wide", []);
+    assert::assert_eq(wide[0].get<int>("id"), 4294967296);
+    assert::assert_eq(wide[0].get<int>("n"), -9007199254740993);
+
     // a prepared statement bound and run more than once
     let stmt = db.prepare("insert into people (name, age, score) values (?, ?, ?)");
     stmt.bind_all([Value::Text("Linus"), Value::Int(28), Value::Real(7.25)]);

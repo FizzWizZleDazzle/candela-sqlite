@@ -229,8 +229,7 @@ impl Database {
         return sqlite::sq_changes(self.handle);
     }
 
-    /// The rowid of the most recent insert. sqlite rowids are 64-bit; one
-    /// past the int range comes back truncated.
+    /// The rowid of the most recent insert.
     fn last_rowid(self) {
         return sqlite::sq_last_rowid(self.handle);
     }
